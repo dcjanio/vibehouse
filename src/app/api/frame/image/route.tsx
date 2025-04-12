@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
       React.createElement(
         'div',
         {
+          key: 'root',
           style: {
             height: '100%',
             width: '100%',
