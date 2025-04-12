@@ -1,6 +1,5 @@
 import { ImageResponse } from 'next/og';
 import { NextRequest } from 'next/server';
-import React from 'react';
 
 export const runtime = 'edge';
 
@@ -46,6 +45,7 @@ export async function GET(req: NextRequest) {
             justifyContent: 'center',
             backgroundColor: '#1a1a1a',
             padding: '40px',
+            fontFamily: 'system-ui',
           }}
         >
           <h1
@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
               color: 'white',
               marginBottom: '20px',
               textAlign: 'center',
+              fontFamily: 'system-ui',
             }}
           >
             {title}
@@ -64,6 +65,7 @@ export async function GET(req: NextRequest) {
               fontSize: '32px',
               color: '#a3a3a3',
               textAlign: 'center',
+              fontFamily: 'system-ui',
             }}
           >
             {description}
