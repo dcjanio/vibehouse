@@ -35,9 +35,10 @@ export async function GET(req: NextRequest) {
     const description = getDescription(type);
 
     return new ImageResponse(
-      (
-        <div
-          style={{
+      React.createElement(
+        'div',
+        {
+          style: {
             height: '100%',
             width: '100%',
             display: 'flex',
@@ -46,29 +47,36 @@ export async function GET(req: NextRequest) {
             justifyContent: 'center',
             backgroundColor: '#1a1a1a',
             padding: '40px',
-          }}
-        >
-          <h1
-            style={{
-              fontSize: '60px',
-              fontWeight: 'bold',
-              color: 'white',
-              marginBottom: '20px',
-              textAlign: 'center',
-            }}
-          >
-            {title}
-          </h1>
-          <p
-            style={{
-              fontSize: '32px',
-              color: '#a3a3a3',
-              textAlign: 'center',
-            }}
-          >
-            {description}
-          </p>
-        </div>
+          },
+        },
+        [
+          React.createElement(
+            'h1',
+            {
+              key: 'title',
+              style: {
+                fontSize: '60px',
+                fontWeight: 'bold',
+                color: 'white',
+                marginBottom: '20px',
+                textAlign: 'center',
+              },
+            },
+            title
+          ),
+          React.createElement(
+            'p',
+            {
+              key: 'description',
+              style: {
+                fontSize: '32px',
+                color: '#a3a3a3',
+                textAlign: 'center',
+              },
+            },
+            description
+          ),
+        ]
       ),
       {
         width: 1200,
