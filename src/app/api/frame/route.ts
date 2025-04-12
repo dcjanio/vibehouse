@@ -14,6 +14,9 @@ export async function GET(req: NextRequest) {
           <meta property="fc:frame:button:1" content="Create Event" />
           <meta property="fc:frame:button:2" content="View Events" />
           <meta property="fc:frame:post_url" content="${process.env.NEXT_PUBLIC_BASE_URL}/api/frame/action" />
+          <meta property="og:image" content="${process.env.NEXT_PUBLIC_BASE_URL}/api/frame/image?type=default" />
+          <meta property="og:title" content="VibeHouse Events" />
+          <meta property="og:description" content="Create and join events with your Farcaster friends" />
         </head>
       </html>`,
       {
