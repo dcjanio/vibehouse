@@ -26,15 +26,27 @@ A Farcaster Frame web app that enables wallet users to mint NFT-based calendar i
    ```bash
    npm install
    ```
-3. Create a `.env.local` file with the following variables:
+3. Copy `.env.example` to `.env.local` and fill in the required values:
+   ```bash
+   cp .env.example .env.local
    ```
-   NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your_wallet_connect_project_id
-   NEXT_PUBLIC_BASE_URL=http://localhost:3000
-   ```
+   Required environment variables:
+   - `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`: Get from [WalletConnect Cloud](https://cloud.walletconnect.com/)
+   - `NEXT_PUBLIC_BASE_SEPOLIA_RPC`: Your Base Sepolia RPC URL
+   - `NEXT_PUBLIC_BASE_URL`: Local development URL
+   - `NEXT_PUBLIC_HOST`: Local development host
+
 4. Run the development server:
    ```bash
    npm run dev
    ```
+
+## Security Notes
+
+- Never commit `.env` or `.env.local` files to the repository
+- Keep your API keys and RPC URLs secure
+- Use environment variables for all sensitive information
+- For production, set environment variables in your hosting platform (e.g., Vercel)
 
 ## Project Structure
 
