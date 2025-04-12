@@ -9,7 +9,6 @@ import RedeemInvite from '@/components/RedeemInvite';
 import '@rainbow-me/rainbowkit/styles.css';
 import Link from 'next/link';
 import ManualTokenInput from '@/components/ManualTokenInput';
-import { useSearchParams } from 'next/navigation';
 
 const baseSepolia = {
   id: 84532,
@@ -197,9 +196,6 @@ interface InviteData {
   duration: bigint;
 }
 
-// Filter types for invite status
-type InviteFilterStatus = 'upcoming' | 'pending' | 'past';
-
 // Main page component
 export default function InvitesPage() {
   return (
@@ -216,65 +212,14 @@ function InvitesContent() {
   const [clientReady, setClientReady] = useState(false);
   const [selectedInvite, setSelectedInvite] = useState<number | null>(null);
   const [invites, setInvites] = useState<InviteData[]>([]);
-  const [filteredInvites, setFilteredInvites] = useState<InviteData[]>([]);
-  const [filterStatus, setFilterStatus] = useState<InviteFilterStatus>('upcoming');
   const [tokenIds, setTokenIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showTokenInputHighlighted, setShowTokenInputHighlighted] = useState(false);
   const { address, isConnected } = useAccount();
-  const searchParams = useSearchParams();
 
   // Set client ready after mount to prevent hydration mismatch
   useEffect(() => {
     setClientReady(true);
-    
-    // Check if we should highlight the token input section
-    const showTokenInput = searchParams.get('showTokenInput');
-    if (showTokenInput === 'true') {
-      setShowTokenInputHighlighted(true);
-    }
-  }, [searchParams]);
-
-  // Update filtered invites whenever invites or filter status changes
-  useEffect(() => {
-    if (!invites.length) {
-      setFilteredInvites([]);
-      return;
-    }
-
-    const now = BigInt(Math.floor(Date.now() / 1000));
-    
-    let filtered: InviteData[];
-    switch (filterStatus) {
-      case 'upcoming':
-        // Active invites that haven't been redeemed and haven't expired
-        filtered = invites.filter(invite => 
-          !invite.isRedeemed && invite.expiration > now
-        );
-        break;
-      case 'pending':
-        // Invites that have been redeemed but the meeting is in the future
-        filtered = invites.filter(invite => 
-          invite.isRedeemed
-        );
-        break;
-      case 'past':
-        // Expired invites or past meetings
-        filtered = invites.filter(invite =>
-          invite.expiration < now && !invite.isRedeemed
-        );
-        break;
-      default:
-        filtered = invites;
-    }
-    
-    setFilteredInvites(filtered);
-    
-    // If we have filtered results and no selected invite, select the first one
-    if (filtered.length > 0 && !selectedInvite) {
-      setSelectedInvite(filtered[0].id);
-    }
-  }, [invites, filterStatus, selectedInvite]);
+  }, []);
 
   // Find tokens by querying total supply and scanning each token
   useEffect(() => {
@@ -564,94 +509,6 @@ function InvitesContent() {
     );
   }
 
-  // Not connected view with token input section
-  if (!isConnected) {
-    return (
-      <main className="flex min-h-screen flex-col items-center p-6 md:p-24 bg-primary">
-        <div className="z-10 max-w-6xl w-full">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-            <div>
-              <h1 className="text-4xl font-bold text-accent">My Invites</h1>
-              <p className="text-gray-400 mt-1">Calendar invites sent to your wallet address</p>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <a 
-                href="https://sepolia.basescan.org/address/0x12d23ebda380859087b441c9de907ce00bd58662" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
-              >
-                View Contract
-              </a>
-              <Link href="/" className="text-blue-400 hover:underline">
-                Create New Invite
-              </Link>
-              <ConnectButton />
-            </div>
-          </div>
-        
-          <div className="flex flex-col lg:flex-row gap-8">
-            <div className="w-full">
-              {showTokenInputHighlighted && (
-                <div className="p-6 bg-blue-500/10 border-2 border-blue-500 rounded-lg mb-8 animate-pulse">
-                  <h2 className="text-2xl font-bold text-blue-400 mb-4">View Specific Invite</h2>
-                  <p className="text-gray-400 mb-6">
-                    Enter the token ID of the invite you want to view. You don't need to connect a wallet
-                    to view specific invite details.
-                  </p>
-                  <ManualTokenInput 
-                    onTokenSubmit={(tokenId) => {
-                      console.log("Manual token ID submitted:", tokenId);
-                      setSelectedInvite(tokenId);
-                    }} 
-                    autoFocus={true}
-                  />
-                </div>
-              )}
-            
-              <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                <h2 className="text-2xl font-bold text-accent mb-6">Connect Wallet to View Your Invites</h2>
-                <p className="text-gray-400 mb-8">
-                  Connect your wallet to view and manage your calendar invites. 
-                  <br />Once connected, you'll see all the meeting invites sent to your wallet address.
-                </p>
-                <div className="flex justify-center">
-                  <ConnectButton />
-                </div>
-                
-                <div className="mt-10 pt-6 border-t border-gray-700">
-                  <h3 className="text-lg font-medium text-accent mb-4">Or View a Specific Invite</h3>
-                  <div className="max-w-md mx-auto">
-                    <ManualTokenInput 
-                      onTokenSubmit={(tokenId) => {
-                        console.log("Manual token ID submitted:", tokenId);
-                        setSelectedInvite(tokenId);
-                      }} 
-                      autoFocus={showTokenInputHighlighted}
-                    />
-                  </div>
-                </div>
-                
-                <div className="mt-6 pt-6 border-t border-gray-700 flex justify-center">
-                  <Link href="/" className="bg-blue-600 text-white py-2 px-6 rounded hover:bg-blue-700 transition-colors">
-                    Create New Invite
-                  </Link>
-                </div>
-              </div>
-            </div>
-            
-            {selectedInvite && (
-              <div className="w-full lg:w-2/3">
-                <RedeemInvite tokenId={selectedInvite} />
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="flex min-h-screen flex-col items-center p-6 md:p-24 bg-primary">
       <div className="z-10 max-w-6xl w-full">
@@ -677,135 +534,117 @@ function InvitesContent() {
           </div>
         </div>
         
-        <div className="flex flex-col lg:flex-row gap-8">
-          <div className="w-full lg:w-1/3">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-accent">My Calendar Invites</h2>
-              {loading && (
-                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-              )}
+        {!isConnected ? (
+          <div className="flex flex-col lg:flex-row gap-8">
+            <div className="w-full">
+              <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
+                <h2 className="text-2xl font-bold text-accent mb-6">Connect Wallet to View Your Invites</h2>
+                <p className="text-gray-400 mb-8">
+                  Connect your wallet to view and manage your calendar invites. 
+                  <br />Once connected, you'll see all the meeting invites sent to your wallet address.
+                </p>
+                <div className="flex justify-center">
+                  <ConnectButton />
+                </div>
+                <div className="mt-10 pt-6 border-t border-gray-700 flex justify-center">
+                  <Link href="/" className="bg-blue-600 text-white py-2 px-6 rounded hover:bg-blue-700 transition-colors">
+                    Create New Invite
+                  </Link>
+                </div>
+              </div>
             </div>
-            
-            {/* Filter Status Tabs */}
-            <div className="mb-4 bg-gray-800 rounded-lg p-1 flex">
-              <button
-                onClick={() => setFilterStatus('upcoming')}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                  filterStatus === 'upcoming' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                }`}
-              >
-                Upcoming
-              </button>
-              <button
-                onClick={() => setFilterStatus('pending')}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                  filterStatus === 'pending' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                }`}
-              >
-                Pending
-              </button>
-              <button
-                onClick={() => setFilterStatus('past')}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                  filterStatus === 'past' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                }`}
-              >
-                Past
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              {filteredInvites.length > 0 ? (
-                filteredInvites.map((invite) => {
-                  const status = getInviteStatus(invite);
-                  
-                  return (
-                    <button
-                      key={invite.id}
-                      onClick={() => setSelectedInvite(invite.id)}
-                      className={`w-full p-4 rounded-lg text-left ${
-                        selectedInvite === invite.id
-                          ? 'bg-blue-500/10 border border-blue-500'
-                          : 'bg-gray-800 border border-gray-700 hover:border-gray-600'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-accent">{invite.topic}</p>
-                          <p className="text-sm text-gray-400 mt-1">
-                            From: {formatAddress(invite.sender)}
-                          </p>
+          </div>
+        ) : (
+          <div className="flex flex-col lg:flex-row gap-8">
+            <div className="w-full lg:w-1/3">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-accent">My Calendar Invites</h2>
+                {loading && (
+                  <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                )}
+              </div>
+              
+              <div className="space-y-3">
+                {invites.length > 0 ? (
+                  invites.map((invite) => {
+                    const status = getInviteStatus(invite);
+                    
+                    return (
+                      <button
+                        key={invite.id}
+                        onClick={() => setSelectedInvite(invite.id)}
+                        className={`w-full p-4 rounded-lg text-left ${
+                          selectedInvite === invite.id
+                            ? 'bg-blue-500/10 border border-blue-500'
+                            : 'bg-gray-800 border border-gray-700 hover:border-gray-600'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-accent">{invite.topic}</p>
+                            <p className="text-sm text-gray-400 mt-1">
+                              From: {formatAddress(invite.sender)}
+                            </p>
+                          </div>
+                          <div className={`px-2 py-1 rounded-full text-xs border ${status.className}`}>
+                            {status.label}
+                          </div>
                         </div>
-                        <div className={`px-2 py-1 rounded-full text-xs border ${status.className}`}>
-                          {status.label}
-                        </div>
-                      </div>
-                      
-                      <p className="text-xs text-gray-500 mt-2">
-                        {invite.isRedeemed 
-                          ? 'Already booked'
-                          : invite.expiration < BigInt(Math.floor(Date.now() / 1000))
-                            ? 'Expired'
-                            : `Expires: ${new Date(Number(invite.expiration) * 1000).toLocaleDateString()}`
-                        }
+                        
+                        <p className="text-xs text-gray-500 mt-2">
+                          {invite.isRedeemed 
+                            ? 'Already booked'
+                            : invite.expiration < BigInt(Math.floor(Date.now() / 1000))
+                              ? 'Expired'
+                              : `Expires: ${new Date(Number(invite.expiration) * 1000).toLocaleDateString()}`
+                          }
+                        </p>
+                      </button>
+                    );
+                  })
+                ) : loading ? (
+                  <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
+                    <p className="text-gray-400">Loading your invites...</p>
+                  </div>
+                ) : (
+                  <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
+                    <p className="text-gray-400 mb-4">No invites found for your wallet address</p>
+                    <p className="text-sm text-gray-500 mb-6">We couldn't find any calendar invites sent to {formatAddress(address || '')}</p>
+                    
+                    <div className="mb-6">
+                      <h3 className="text-accent font-medium mb-2">Did someone send you an invite?</h3>
+                      <p className="text-sm text-gray-400 mb-4">
+                        If you know the token ID of your invite, you can enter it manually:
                       </p>
-                    </button>
-                  );
-                })
-              ) : loading ? (
-                <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                  <p className="text-gray-400">Loading your invites...</p>
-                </div>
-              ) : invites.length > 0 ? (
-                <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                  <p className="text-gray-400 mb-4">No {filterStatus} invites found</p>
-                  <p className="text-sm text-gray-500">Try selecting a different filter</p>
-                </div>
+                      <ManualTokenInput 
+                        onTokenSubmit={(tokenId) => {
+                          console.log("Manual token ID submitted:", tokenId);
+                          setSelectedInvite(tokenId);
+                        }} 
+                      />
+                    </div>
+                    
+                    <div className="mt-6 border-t border-gray-700 pt-6">
+                      <Link href="/" className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors">
+                        Create New Invite
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="w-full lg:w-2/3">
+              {selectedInvite ? (
+                <RedeemInvite tokenId={selectedInvite} />
               ) : (
                 <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                  <p className="text-gray-400 mb-4">No invites found for your wallet address</p>
-                  <p className="text-sm text-gray-500 mb-6">We couldn't find any calendar invites sent to {formatAddress(address || '')}</p>
-                  
-                  <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500 rounded-lg text-left">
-                    <h3 className="text-blue-400 font-medium mb-2">View Specific Invite</h3>
-                    <p className="text-sm text-gray-400 mb-4">
-                      If you know the token ID of your invite, you can enter it manually:
-                    </p>
-                    <ManualTokenInput 
-                      onTokenSubmit={(tokenId) => {
-                        console.log("Manual token ID submitted:", tokenId);
-                        setSelectedInvite(tokenId);
-                      }} 
-                      autoFocus={showTokenInputHighlighted}
-                    />
-                  </div>
-                  
-                  <div className="mt-6 border-t border-gray-700 pt-6">
-                    <Link href="/" className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors">
-                      Create New Invite
-                    </Link>
-                  </div>
+                  <p className="text-gray-400">Select an invite to view details and book a meeting</p>
                 </div>
               )}
             </div>
           </div>
-          
-          <div className="w-full lg:w-2/3">
-            {selectedInvite ? (
-              <RedeemInvite tokenId={selectedInvite} />
-            ) : (
-              <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                <p className="text-gray-400">Select an invite to view details and book a meeting</p>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </main>
   );

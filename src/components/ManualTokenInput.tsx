@@ -1,14 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface ManualTokenInputProps {
   onTokenSubmit: (tokenId: number) => void;
+  autoFocus?: boolean;
 }
 
-export default function ManualTokenInput({ onTokenSubmit }: ManualTokenInputProps) {
+export default function ManualTokenInput({ onTokenSubmit, autoFocus = false }: ManualTokenInputProps) {
   const [tokenId, setTokenId] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (autoFocus && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [autoFocus]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,11 +46,12 @@ export default function ManualTokenInput({ onTokenSubmit }: ManualTokenInputProp
       <form onSubmit={handleSubmit} className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <input
+            ref={inputRef}
             type="text"
             value={tokenId}
             onChange={(e) => setTokenId(e.target.value)}
             placeholder="Enter token ID (e.g. 1)"
-            className="bg-gray-900 px-3 py-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none w-full"
+            className="bg-gray-900 px-3 py-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none w-full text-white"
           />
           <button
             type="submit"

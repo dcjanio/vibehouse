@@ -95,6 +95,19 @@ export default function Home() {
             </p>
             
             <div className="flex flex-col items-center justify-center">
+              <div className="w-full max-w-lg mb-8 p-4 bg-blue-500/10 border border-blue-500 rounded-lg flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-blue-400">Have an invite token ID?</h2>
+                  <p className="text-sm text-gray-400">View and redeem a specific invite by ID</p>
+                </div>
+                <Link 
+                  href="/invites?showTokenInput=true" 
+                  className="whitespace-nowrap px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  View Specific Invite
+                </Link>
+              </div>
+              
               <MintForm initialData={frameParams} />
             </div>
           </div>

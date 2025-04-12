@@ -7,9 +7,12 @@ A Farcaster Frame web app that enables wallet users to mint NFT-based calendar i
 - Farcaster Frame integration
 - Wallet connection via RainbowKit
 - NFT minting and transfer
-- Google Calendar integration
+- Google Calendar integration with OAuth authentication
 - Google Meet link generation
 - Multi-step booking flow
+- Email notifications with calendar attachments
+- View specific invites by token ID
+- Filter invites by status (Upcoming, Pending, Past)
 
 ## Tech Stack
 
@@ -18,6 +21,7 @@ A Farcaster Frame web app that enables wallet users to mint NFT-based calendar i
 - **Frame Handling:** Farcaster Frame SDK
 - **Wallet Support:** WalletConnect, RainbowKit
 - **Calendar Integration:** Google Calendar API
+- **Email Services:** Nodemailer with iCal
 - **Backend:** Next.js API Routes
 
 ## Getting Started
@@ -36,8 +40,22 @@ A Farcaster Frame web app that enables wallet users to mint NFT-based calendar i
    - `NEXT_PUBLIC_BASE_SEPOLIA_RPC`: Your Base Sepolia RPC URL - Get from: [Tenderly](tenderly.co)
    - `NEXT_PUBLIC_BASE_URL`: Local development URL
    - `NEXT_PUBLIC_HOST`: Local development host
+   - `GOOGLE_CLIENT_ID`: OAuth client ID from Google Cloud Console
+   - `GOOGLE_CLIENT_SECRET`: OAuth client secret from Google Cloud Console
+   - `EMAIL_HOST`: SMTP server for email notifications (optional)
+   - `EMAIL_PORT`: SMTP port (optional)
+   - `EMAIL_USER`: SMTP username (optional)
+   - `EMAIL_PASS`: SMTP password (optional)
+   - `EMAIL_FROM`: Default sender email (optional)
 
-4. Run the development server:
+4. Set up Google Cloud Console:
+   - Create a new project
+   - Enable Google Calendar API
+   - Create OAuth 2.0 credentials
+   - Configure the OAuth consent screen with appropriate scopes
+   - Add your domain to authorized redirects
+
+5. Run the development server:
    ```bash
    npm run dev
    ```
@@ -78,6 +96,25 @@ The app implements a Farcaster Frame for seamless interaction within the Farcast
 - Native wallet integration via Farcaster SDK
 - Seamless transition between Frame and web app
 
+## Google Calendar Integration
+
+The app provides a complete Google Calendar integration:
+
+1. **OAuth Authentication**:
+   - Secure OAuth 2.0 flow
+   - Token storage and refresh
+   - User email retrieval
+
+2. **Calendar Operations**:
+   - Check calendar availability (/api/google/calendar/availability)
+   - Create calendar events (/api/google/calendar/events)
+   - Generate Google Meet links
+
+3. **Email Notifications**:
+   - iCalendar (.ics) attachments
+   - HTML and plain text formats
+   - Meeting details including Google Meet links
+
 ## Security Notes
 
 - Never commit `.env` or `.env.local` files to the repository
@@ -90,11 +127,16 @@ The app implements a Farcaster Frame for seamless interaction within the Farcast
 - `src/app/api/frame/route.ts` - Farcaster Frame API route
 - `src/app/api/frame/action/route.ts` - Frame action handler with state management
 - `src/app/api/frame/image/route.tsx` - Frame image generation
+- `src/app/api/google/auth/route.ts` - Google OAuth authentication endpoint
+- `src/app/api/google/callback/route.ts` - OAuth callback handler
+- `src/app/api/google/calendar/events/route.ts` - Calendar event creation
+- `src/app/api/google/calendar/availability/route.ts` - Calendar availability check
 - `src/app/page.tsx` - Main application page
-- `src/app/invites/page.tsx` - Invite management page
+- `src/app/invites/page.tsx` - Invite management page with filtering
 - `src/components/MintForm.tsx` - Form for creating new invites
 - `src/components/RedeemInvite.tsx` - Component for redeeming invites
 - `src/components/FarcasterFrame.tsx` - Farcaster-specific UI component
+- `src/components/ManualTokenInput.tsx` - Component for viewing specific token IDs
 - `contracts/CalendarInviteNFT.sol` - Smart contract for calendar invites
 
 ## Contributing
