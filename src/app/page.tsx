@@ -4,14 +4,15 @@ import { useState } from 'react';
 import { RainbowKitProvider, getDefaultWallets } from '@rainbow-me/rainbowkit';
 import { configureChains, createClient, WagmiConfig } from 'wagmi';
 import { mainnet, goerli } from 'wagmi/chains';
-import { publicProvider } from 'wagmi/providers/public';
+import { alchemyProvider } from 'wagmi/providers/alchemy';
 import '@rainbow-me/rainbowkit/styles.css';
 
 const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '';
+const alchemyApiKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || '';
 
 const { chains, provider } = configureChains(
   [mainnet, goerli],
-  [publicProvider()]
+  [alchemyProvider({ apiKey: alchemyApiKey })]
 );
 
 const { connectors } = getDefaultWallets({
