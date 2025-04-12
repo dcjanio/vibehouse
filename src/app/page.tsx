@@ -2,32 +2,36 @@
 
 import { useState } from 'react';
 import { RainbowKitProvider, getDefaultWallets } from '@rainbow-me/rainbowkit';
-import { createConfig, http, WagmiConfig } from 'wagmi';
+import { configureChains, createClient, WagmiConfig } from 'wagmi';
 import { mainnet, goerli } from 'wagmi/chains';
+import { publicProvider } from 'wagmi/providers/public';
 import '@rainbow-me/rainbowkit/styles.css';
 
 const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '';
 
+const { chains, provider } = configureChains(
+  [mainnet, goerli],
+  [publicProvider()]
+);
+
 const { connectors } = getDefaultWallets({
   appName: 'NFT Calendar Invite',
   projectId,
+  chains,
 });
 
-const config = createConfig({
-  chains: [mainnet, goerli],
-  transports: {
-    [mainnet.id]: http(),
-    [goerli.id]: http(),
-  },
+const client = createClient({
+  autoConnect: true,
   connectors,
+  provider,
 });
 
 export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
 
   return (
-    <WagmiConfig config={config}>
-      <RainbowKitProvider>
+    <WagmiConfig client={client}>
+      <RainbowKitProvider chains={chains}>
         <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-primary">
           <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm">
             <h1 className="text-4xl font-bold text-accent mb-8 text-center">
