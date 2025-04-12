@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { NextRequest } from 'next/server';
-import React from 'react';
+import React, { ReactElement } from 'react';
 
 export const runtime = 'edge';
 
@@ -34,56 +34,55 @@ export async function GET(req: NextRequest) {
     const title = getTitle(type);
     const description = getDescription(type);
 
-    return new ImageResponse(
-      React.createElement(
-        'div',
-        {
-          key: 'root',
-          style: {
-            height: '100%',
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#1a1a1a',
-            padding: '40px',
-          },
-        },
-        [
-          React.createElement(
-            'h1',
-            {
-              key: 'title',
-              style: {
-                fontSize: '60px',
-                fontWeight: 'bold',
-                color: 'white',
-                marginBottom: '20px',
-                textAlign: 'center',
-              },
-            },
-            title
-          ),
-          React.createElement(
-            'p',
-            {
-              key: 'description',
-              style: {
-                fontSize: '32px',
-                color: '#a3a3a3',
-                textAlign: 'center',
-              },
-            },
-            description
-          ),
-        ]
-      ),
+    const element: ReactElement = React.createElement(
+      'div',
       {
-        width: 1200,
-        height: 630,
-      }
+        key: 'root',
+        style: {
+          height: '100%',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#1a1a1a',
+          padding: '40px',
+        },
+      },
+      [
+        React.createElement(
+          'h1',
+          {
+            key: 'title',
+            style: {
+              fontSize: '60px',
+              fontWeight: 'bold',
+              color: 'white',
+              marginBottom: '20px',
+              textAlign: 'center',
+            },
+          },
+          title
+        ),
+        React.createElement(
+          'p',
+          {
+            key: 'description',
+            style: {
+              fontSize: '32px',
+              color: '#a3a3a3',
+              textAlign: 'center',
+            },
+          },
+          description
+        ),
+      ]
     );
+
+    return new ImageResponse(element, {
+      width: 1200,
+      height: 630,
+    });
   } catch (e) {
     console.error('Error generating image:', e);
     return new Response('Failed to generate image', { status: 500 });
