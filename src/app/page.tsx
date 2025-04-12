@@ -1,10 +1,14 @@
 'use client';
 
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { RainbowKitProvider, getDefaultWallets, ConnectButton } from '@rainbow-me/rainbowkit';
-import { configureChains, createClient, WagmiConfig } from 'wagmi';
+import { WagmiConfig, createConfig, configureChains } from 'wagmi';
 import { mainnet, goerli } from 'wagmi/chains';
 import { publicProvider } from 'wagmi/providers/public';
 import '@rainbow-me/rainbowkit/styles.css';
+import MintForm from '@/components/MintForm';
+import { useEffect, useState } from 'react';
 
 const baseSepolia = {
   id: 84532,
@@ -27,7 +31,7 @@ const baseSepolia = {
 
 const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '';
 
-const { chains, provider } = configureChains(
+const { chains, publicClient } = configureChains(
   [baseSepolia],
   [publicProvider()]
 );
@@ -38,26 +42,60 @@ const { connectors } = getDefaultWallets({
   chains,
 });
 
-const client = createClient({
+const wagmiConfig = createConfig({
   autoConnect: true,
   connectors,
-  provider,
+  publicClient,
 });
 
 export default function Home() {
+  const searchParams = useSearchParams();
+  const [frameParams, setFrameParams] = useState<{
+    recipient?: string;
+    topic?: string;
+    duration?: number;
+  }>({});
+  
+  // Extract parameters from URL if they exist (for frame redirects)
+  useEffect(() => {
+    const recipient = searchParams.get('recipient');
+    const topic = searchParams.get('topic');
+    const duration = searchParams.get('duration');
+    
+    const params: {
+      recipient?: string;
+      topic?: string;
+      duration?: number;
+    } = {};
+    
+    if (recipient) params.recipient = recipient;
+    if (topic) params.topic = topic;
+    if (duration) params.duration = parseInt(duration);
+    
+    setFrameParams(params);
+  }, [searchParams]);
+
   return (
-    <WagmiConfig client={client}>
+    <WagmiConfig config={wagmiConfig}>
       <RainbowKitProvider chains={chains}>
-        <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-primary">
-          <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm">
-            <h1 className="text-4xl font-bold text-accent mb-8 text-center">
-              NFT Calendar Invite
-            </h1>
-            <p className="text-xl text-secondary mb-8 text-center">
+        <main className="flex min-h-screen flex-col items-center p-6 md:p-24 bg-primary">
+          <div className="z-10 max-w-5xl w-full">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+              <h1 className="text-4xl font-bold text-accent">NFT Calendar Invite</h1>
+              <div className="flex items-center gap-4">
+                <Link href="/invites" className="text-blue-400 hover:underline">
+                  View My Invites
+                </Link>
+                <ConnectButton />
+              </div>
+            </div>
+            
+            <p className="text-xl text-gray-400 mb-8 text-center">
               Mint and manage NFT-based calendar invites
             </p>
+            
             <div className="flex flex-col items-center justify-center">
-              <ConnectButton />
+              <MintForm initialData={frameParams} />
             </div>
           </div>
         </main>

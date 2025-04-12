@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
-contract CalendarInviteNFT is ERC721, ERC721URIStorage, Ownable {
+contract CalendarInviteNFT is ERC721URIStorage, Ownable {
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds;
 
@@ -23,20 +23,20 @@ contract CalendarInviteNFT is ERC721, ERC721URIStorage, Ownable {
     event InviteCreated(uint256 indexed tokenId, address indexed host, address indexed recipient);
     event InviteRedeemed(uint256 indexed tokenId, address indexed redeemer);
 
-    constructor() ERC721("Calendar Invite", "CALNFT") Ownable(msg.sender) {}
+    constructor() ERC721("Calendar Invite", "CALNFT") Ownable() {}
 
     function createInvite(
         address recipient,
         string memory topic,
         uint256 duration,
         uint256 expiration,
-        string memory tokenURI
+        string memory metadataURI
     ) public returns (uint256) {
         _tokenIds.increment();
         uint256 newTokenId = _tokenIds.current();
 
         _safeMint(recipient, newTokenId);
-        _setTokenURI(newTokenId, tokenURI);
+        _setTokenURI(newTokenId, metadataURI);
 
         invites[newTokenId] = CalendarInvite({
             host: msg.sender,
@@ -59,14 +59,7 @@ contract CalendarInviteNFT is ERC721, ERC721URIStorage, Ownable {
         emit InviteRedeemed(tokenId, msg.sender);
     }
 
-    // Override required functions
-    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage)
-        returns (string memory) {
-        return super.tokenURI(tokenId);
-    }
-
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage)
-        returns (bool) {
-        return super.supportsInterface(interfaceId);
+    function _burn(uint256 tokenId) internal override(ERC721URIStorage) {
+        super._burn(tokenId);
     }
 } 
