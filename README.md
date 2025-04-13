@@ -125,6 +125,46 @@ The project uses a custom `SoulboundCalendarInviteNFT` contract with the followi
    npm start
    ```
 
+## Setup Instructions
+
+### Environment Variables
+
+1. Copy the `.env.example` file to `.env` and fill in your credentials:
+```bash
+cp .env.example .env
+```
+
+2. Update the following values in your `.env` file:
+   - `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`: Your WalletConnect project ID
+   - `NEXT_PUBLIC_BASE_SEPOLIA_RPC`: Base Sepolia RPC URL
+   - `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+
+### Supabase Setup
+
+1. Create a Supabase account at [supabase.com](https://supabase.com)
+2. Create a new project and get your URL and anon key from the API settings
+3. Create the Supabase table by running the SQL in `supabase-setup.sql`
+4. Create `supabase.ts` from the template:
+```bash
+cp src/lib/supabase.template.ts src/lib/supabase.ts
+```
+
+5. For local development, you may need to update `src/lib/supabase.ts` with your hardcoded credentials. This file is ignored in git to prevent exposing sensitive information.
+
+### Running the Application
+
+```bash
+npm install
+npm run dev
+```
+
+## Testing
+
+The application includes several test pages:
+- `/debug`: Test direct contract calls and view transaction history
+- `/verify`: Verify Supabase connection and table structure
+
 ## Usage
 
 ### Minting an Invite
