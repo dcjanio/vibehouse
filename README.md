@@ -36,7 +36,7 @@ A Farcaster Frame web app that enables wallet users to mint NFT-based calendar i
    cp .env.example .env.local
    ```
    Required environment variables:
-   - `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`: Get from [WalletConnect Cloud](https://cloud.walletconnect.com/)
+   - `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`: Get from [Reown](https://cloud.walletconnect.com/)
    - `NEXT_PUBLIC_BASE_SEPOLIA_RPC`: Your Base Sepolia RPC URL - Get from: [Tenderly](tenderly.co)
    - `NEXT_PUBLIC_BASE_URL`: Local development URL
    - `NEXT_PUBLIC_HOST`: Local development host
