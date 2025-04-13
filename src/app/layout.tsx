@@ -1,22 +1,24 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
-
-const inter = Inter({ subsets: ['latin'] });
+import './globals.css'
+import { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'NFT Calendar Invite',
-  description: 'Mint and manage NFT-based calendar invites',
-};
+  description: 'Schedule meetings using NFT invites',
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <head />
+      <body className="bg-gray-900 text-white">
+        <div id="app" suppressHydrationWarning>
+          {children}
+        </div>
+      </body>
     </html>
-  );
+  )
 }

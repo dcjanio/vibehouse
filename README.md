@@ -1,152 +1,156 @@
 # NFT Calendar Invite
 
-A Farcaster Frame web app that enables wallet users to mint NFT-based calendar invites. These NFTs can be transferred to other wallets, and the holder can redeem them to schedule a meeting via Google Calendar with a Google Meet link.
+A decentralized calendar invitation system using soulbound NFTs. The system allows the contract owner to mint NFT invites that recipients can redeem to schedule meetings, with all details securely stored on the blockchain and in Supabase.
 
-## Features
+## Overview
 
-- Farcaster Frame integration
-- Wallet connection via RainbowKit
-- NFT minting and transfer
-- Google Calendar integration with OAuth authentication
-- Google Meet link generation
-- Multi-step booking flow
-- Email notifications with calendar attachments
-- View specific invites by token ID
-- Filter invites by status (Upcoming, Pending, Past)
+NFT Calendar Invite enables an intuitive way to schedule meetings using blockchain technology:
 
-## Tech Stack
+1. The contract owner mints an NFT invite for a specific recipient
+2. The NFT is sent directly to the recipient's wallet
+3. The invite details (topic, duration, etc.) are stored both on-chain and in Supabase
+4. Recipients can view and redeem their NFTs to schedule a meeting time
+5. Once scheduled, both parties receive calendar notifications
 
-- **Frontend:** Next.js, Tailwind CSS
-- **Smart Contracts:** Solidity
-- **Frame Handling:** Farcaster Frame SDK
-- **Wallet Support:** WalletConnect, RainbowKit
-- **Calendar Integration:** Google Calendar API
-- **Email Services:** Nodemailer with iCal
-- **Backend:** Next.js API Routes
+## Key Features
 
-## Getting Started
+- **Soulbound NFTs**: NFTs are non-transferable after minting, ensuring only the intended recipient can schedule meetings
+- **Owner-Only Minting**: Only the contract owner (`0x614220b724070f274D0DBeB3D42ED2804aF488c7`) can mint invite NFTs
+- **On-chain Data**: Critical invitation details stored directly on the blockchain
+- **Supabase Integration**: Additional metadata and scheduling details stored in Supabase
+- **Google Calendar Integration**: Scheduled meetings can be integrated with Google Calendar
 
-1. Clone the repository
+## Soulbound NFT Contract
+
+The project uses a custom `SoulboundCalendarInviteNFT` contract with the following features:
+
+- ERC721-based NFT with soulbound properties
+- NFTs cannot be transferred once minted to the recipient
+- Only the contract owner can mint new invites
+- Recipients can redeem invites to schedule meetings
+- Built-in tracking of invite status (redeemed, expired, etc.)
+
+## Technical Architecture
+
+- **Smart Contract**: Solidity contract deployed on Base Sepolia testnet
+- **Frontend**: Next.js application with ethers.js for blockchain interaction
+- **Database**: Supabase for storing additional invite metadata
+- **Authentication**: Wallet-based authentication (MetaMask, etc.)
+- **Calendar**: Google Calendar API integration for scheduling
+
+## Deployment Instructions
+
+### Prerequisites
+
+- Node.js (v16+)
+- Hardhat
+- MetaMask or similar wallet
+- Supabase account
+- Google API credentials (for calendar integration)
+
+### Contract Deployment
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/nft-calendar-invite.git
+   cd nft-calendar-invite
+   ```
+
 2. Install dependencies:
-   ```bash
+   ```
    npm install
    ```
-3. Copy `.env.example` to `.env.local` and fill in the required values:
-   ```bash
-   cp .env.example .env.local
+
+3. Configure the environment variables:
    ```
-   Required environment variables:
-   - `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`: Get from [WalletConnect Cloud](https://cloud.walletconnect.com/)
-   - `NEXT_PUBLIC_BASE_SEPOLIA_RPC`: Your Base Sepolia RPC URL - Get from: [Tenderly](tenderly.co)
-   - `NEXT_PUBLIC_BASE_URL`: Local development URL
-   - `NEXT_PUBLIC_HOST`: Local development host
-   - `GOOGLE_CLIENT_ID`: OAuth client ID from Google Cloud Console
-   - `GOOGLE_CLIENT_SECRET`: OAuth client secret from Google Cloud Console
-   - `EMAIL_HOST`: SMTP server for email notifications (optional)
-   - `EMAIL_PORT`: SMTP port (optional)
-   - `EMAIL_USER`: SMTP username (optional)
-   - `EMAIL_PASS`: SMTP password (optional)
-   - `EMAIL_FROM`: Default sender email (optional)
+   cp .env.example .env
+   ```
+   Then edit `.env` to add your own values.
 
-4. Set up Google Cloud Console:
-   - Create a new project
-   - Enable Google Calendar API
-   - Create OAuth 2.0 credentials
-   - Configure the OAuth consent screen with appropriate scopes
-   - Add your domain to authorized redirects
+4. Compile the contract:
+   ```
+   npx hardhat compile
+   ```
 
-5. Run the development server:
-   ```bash
+5. Deploy to Base Sepolia testnet:
+   ```
+   npx hardhat run scripts/deploy-soulbound.ts --network base-sepolia
+   ```
+
+6. Update the contract address in:
+   - `src/components/MintForm.tsx`
+   - `src/components/RedeemInvite.tsx`
+   - `src/app/api/invites/route.ts`
+
+### Frontend Deployment
+
+1. Update your Supabase credentials in `.env`:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-key
+   ```
+
+2. Set up the Supabase table:
+   ```sql
+   -- Run this SQL in the Supabase SQL Editor
+   CREATE TABLE calendar_invites (
+     id BIGSERIAL PRIMARY KEY,
+     token_id INTEGER NOT NULL UNIQUE,
+     sender_address TEXT NOT NULL,
+     recipient_address TEXT NOT NULL,
+     recipient_email TEXT,
+     topic TEXT NOT NULL,
+     duration INTEGER NOT NULL,
+     expiration BIGINT NOT NULL,
+     is_redeemed BOOLEAN DEFAULT FALSE,
+     redeemed_at TIMESTAMP WITH TIME ZONE,
+     scheduled_time TIMESTAMP WITH TIME ZONE,
+     transaction_hash TEXT,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );
+   
+   CREATE INDEX idx_calendar_invites_sender_address ON calendar_invites(sender_address);
+   CREATE INDEX idx_calendar_invites_recipient_address ON calendar_invites(recipient_address);
+   ```
+
+3. Start the development server:
+   ```
    npm run dev
    ```
 
-## Farcaster Frame Implementation
+4. For production deployment:
+   ```
+   npm run build
+   npm start
+   ```
 
-The app implements a Farcaster Frame for seamless interaction within the Farcaster ecosystem:
+## Usage
 
-### Frame Flow
+### Minting an Invite
 
-1. **Initial Frame**: Users are presented with options to "Send Invite" or "Book Meeting"
-2. **Send Invite Flow**:
-   - Enter recipient wallet address
-   - Enter meeting topic
-   - Select meeting duration (30min/60min)
-   - Confirm and mint the invite NFT
-3. **Book Meeting Flow**:
-   - Redirects to the invites page
-   - View received NFT invites
-   - Select a time slot based on sender's availability
-   - Confirm booking
+1. Connect with the contract owner wallet
+2. Fill in the recipient address, email, topic, and duration
+3. Click "Generate Invite NFT"
+4. Confirm the transaction in your wallet
+5. The NFT will be minted directly to the recipient
 
-### Frame Components
+### Viewing & Redeeming Invites
 
-- **Frame API Routes**: 
-  - `/api/frame/route.ts` - Main entry point for frame interactions
-  - `/api/frame/action/route.ts` - Handles multi-step frame actions with state management
-  - `/api/frame/image/route.tsx` - Generates dynamic frame images
-
-- **Frame State Management**:
-  - Uses URI-encoded JSON state to maintain flow context
-  - Preserves user input between steps
-  - Handles redirects to app for final actions
-
-### Frame Integration
-
-- Automatic detection of Farcaster client environment
-- Native wallet integration via Farcaster SDK
-- Seamless transition between Frame and web app
-
-## Google Calendar Integration
-
-The app provides a complete Google Calendar integration:
-
-1. **OAuth Authentication**:
-   - Secure OAuth 2.0 flow
-   - Token storage and refresh
-   - User email retrieval
-
-2. **Calendar Operations**:
-   - Check calendar availability (/api/google/calendar/availability)
-   - Create calendar events (/api/google/calendar/events)
-   - Generate Google Meet links
-
-3. **Email Notifications**:
-   - iCalendar (.ics) attachments
-   - HTML and plain text formats
-   - Meeting details including Google Meet links
-
-## Security Notes
-
-- Never commit `.env` or `.env.local` files to the repository
-- Keep your API keys and RPC URLs secure
-- Use environment variables for all sensitive information
-- For production, set environment variables in your hosting platform (e.g., Vercel)
-
-## Project Structure
-
-- `src/app/api/frame/route.ts` - Farcaster Frame API route
-- `src/app/api/frame/action/route.ts` - Frame action handler with state management
-- `src/app/api/frame/image/route.tsx` - Frame image generation
-- `src/app/api/google/auth/route.ts` - Google OAuth authentication endpoint
-- `src/app/api/google/callback/route.ts` - OAuth callback handler
-- `src/app/api/google/calendar/events/route.ts` - Calendar event creation
-- `src/app/api/google/calendar/availability/route.ts` - Calendar availability check
-- `src/app/page.tsx` - Main application page
-- `src/app/invites/page.tsx` - Invite management page with filtering
-- `src/components/MintForm.tsx` - Form for creating new invites
-- `src/components/RedeemInvite.tsx` - Component for redeeming invites
-- `src/components/FarcasterFrame.tsx` - Farcaster-specific UI component
-- `src/components/ManualTokenInput.tsx` - Component for viewing specific token IDs
-- `contracts/CalendarInviteNFT.sol` - Smart contract for calendar invites
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+1. Connect with your wallet
+2. Navigate to the "Invites" page
+3. Find your received invites in the "Received Invites" tab
+4. Click "Schedule Meeting" on any invite
+5. Select a date and time for the meeting
+6. Click "Schedule" to redeem the invite
 
 ## License
 
-MIT 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- Base Sepolia Testnet for blockchain infrastructure
+- Supabase for database services
+- Google Calendar API for scheduling integration
+- OpenZeppelin for secure smart contract libraries 

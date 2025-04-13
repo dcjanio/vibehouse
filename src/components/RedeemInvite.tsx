@@ -4,9 +4,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAccount, useContractRead, useContractWrite, usePrepareContractWrite } from 'wagmi';
 import { sdk } from '@farcaster/frame-sdk';
 import Link from 'next/link';
+import { getInviteByTokenId, updateInvite, markInviteAsRedeemed, CalendarInvite } from '@/lib/supabase';
 
-// Using the deployed testnet contract address
-const CONTRACT_ADDRESS = '0x12d23ebdA380859087b441C9De907ce00bD58662';
+// Using the deployed soulbound NFT contract address
+const CONTRACT_ADDRESS = '0xD2840522281731c251C81CcCf34Ade528E19DBC9';
 const ABI = [
   {
     "inputs": [
@@ -107,6 +108,7 @@ export default function RedeemInvite({ tokenId }: { tokenId: number }) {
   const [isGoogleCalendarConnected, setIsGoogleCalendarConnected] = useState(false);
   const [showGoogleAuthPrompt, setShowGoogleAuthPrompt] = useState(false);
   const [isOwner, setIsOwner] = useState<boolean | null>(null); // null = loading, true/false = result
+  const [inviteData, setInviteData] = useState<CalendarInvite | null>(null);
 
   // If client is not ready yet, render a skeleton/loading state
   const [clientReady, setClientReady] = useState(false);
@@ -116,27 +118,70 @@ export default function RedeemInvite({ tokenId }: { tokenId: number }) {
     setClientReady(true);
   }, []);
 
-  // Verify if the user owns this token
+  // Fetch invite data from Supabase
+  useEffect(() => {
+    const fetchInviteData = async () => {
+      if (!tokenId) return;
+      
+      try {
+        setIsLoading(true);
+        const data = await getInviteByTokenId(tokenId);
+        if (data) {
+          setInviteData(data);
+          console.log(`Successfully fetched data for token ID ${tokenId}:`, data);
+          
+          // Check if user is the recipient of the invite
+          if (address && data.recipient_address) {
+            const isRecipient = data.recipient_address.toLowerCase() === address.toLowerCase();
+            setIsOwner(isRecipient);
+          } else {
+            setIsOwner(false);
+          }
+        } else {
+          console.log(`No data found for token ID ${tokenId}, falling back to contract`);
+          // If we don't have data in Supabase, fall back to contract data
+          fetchContractData();
+        }
+      } catch (error) {
+        console.error(`Error fetching data for token ID ${tokenId}:`, error);
+        fetchContractData(); // Fallback to contract
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    if (clientReady && tokenId > 0) {
+      fetchInviteData();
+    }
+  }, [tokenId, address, clientReady]);
+  
+  // Fallback function to fetch from contract directly if Supabase fails
+  const fetchContractData = async () => {
+    // Keep the existing contract read logic as fallback
+    // This will be handled by the existing useContractRead hooks
+  };
+
+  // Verify if the user owns this token (only used as fallback)
   const { data: tokenOwner, isLoading: isLoadingOwner } = useContractRead({
     address: CONTRACT_ADDRESS as `0x${string}`,
     abi: ABI,
     functionName: 'ownerOf',
     args: [BigInt(tokenId)],
     onSuccess: (data) => {
-      console.log(`Owner of token ${tokenId}:`, data);
-      if (address && data) {
+      // Only set isOwner if we don't already have it from Supabase
+      if (isOwner === null && address && data) {
         const isTokenOwner = (data as string).toLowerCase() === address.toLowerCase();
         console.log(`User ${address} owns token ${tokenId}: ${isTokenOwner}`);
         setIsOwner(isTokenOwner);
-      } else {
-        setIsOwner(false);
       }
     },
     onError: (error) => {
       console.error(`Error checking ownership of token ${tokenId}:`, error);
-      setIsOwner(false);
+      if (isOwner === null) {
+        setIsOwner(false);
+      }
     },
-    enabled: isConnected && tokenId > 0,
+    enabled: isConnected && tokenId > 0 && isOwner === null,
   });
 
   // Check if in Farcaster context
@@ -168,57 +213,68 @@ export default function RedeemInvite({ tokenId }: { tokenId: number }) {
     checkFarcasterContext();
   }, []);
 
-  // Fetch invite details
-  const { data: inviteData, isLoading: isLoadingInvite } = useContractRead({
+  // This contract read is kept as fallback but will only run if we don't have Supabase data
+  const { data: contractInviteData, isLoading: isLoadingInvite } = useContractRead({
     address: CONTRACT_ADDRESS as `0x${string}`,
     abi: ABI,
     functionName: 'invites',
     args: [BigInt(tokenId)],
     onSuccess: (data) => {
-      console.log(`Successfully fetched data for token ID ${tokenId}:`, data);
+      if (!inviteData) { // Only process if we don't have Supabase data
+        console.log(`Successfully fetched contract data for token ID ${tokenId}:`, data);
+      }
     },
     onError: (error) => {
-      console.error(`Error fetching data for token ID ${tokenId}:`, error);
+      console.error(`Error fetching contract data for token ID ${tokenId}:`, error);
     },
-    enabled: tokenId > 0,
+    enabled: tokenId > 0 && !inviteData, // Only run if we don't have Supabase data
   });
 
-  // Parse the invite data into a structured object
+  // Use either Supabase or contract data
   const invite: Invite | undefined = useMemo(() => {
-    if (!inviteData) return undefined;
+    // If we have Supabase data, use that
+    if (inviteData) {
+      return {
+        host: inviteData.sender_address,
+        expiration: BigInt(inviteData.expiration),
+        isRedeemed: inviteData.is_redeemed,
+        topic: inviteData.topic,
+        duration: BigInt(inviteData.duration * 60), // Convert minutes to seconds
+      };
+    }
     
-    console.log('Raw invite data from contract:', inviteData);
+    // Otherwise fall back to contract data
+    if (!contractInviteData) return undefined;
     
     try {
-      // Make sure we have data in the expected format
-      if (!Array.isArray(inviteData) && typeof inviteData === 'object') {
-        // Handle the case where it's returned as an object with numeric keys
+      // Keep existing contract data parsing logic
+      if (!Array.isArray(contractInviteData) && typeof contractInviteData === 'object') {
         return {
-          host: (inviteData as any)[0] || '',
-          expiration: (inviteData as any)[1] || BigInt(0),
-          isRedeemed: (inviteData as any)[2] || false,
-          topic: (inviteData as any)[3] || '',
-          duration: (inviteData as any)[4] || BigInt(0),
+          host: (contractInviteData as any)[0] || '',
+          expiration: (contractInviteData as any)[1] || BigInt(0),
+          isRedeemed: (contractInviteData as any)[2] || false,
+          topic: (contractInviteData as any)[3] || '',
+          duration: (contractInviteData as any)[4] || BigInt(0),
         };
-      } else if (Array.isArray(inviteData)) {
-        // Handle the case where it's returned as an array
+      } else if (Array.isArray(contractInviteData)) {
         return {
-          host: inviteData[0] || '',
-          expiration: inviteData[1] || BigInt(0),
-          isRedeemed: inviteData[2] || false,
-          topic: inviteData[3] || '',
-          duration: inviteData[4] || BigInt(0),
+          host: contractInviteData[0] || '',
+          expiration: contractInviteData[1] || BigInt(0),
+          isRedeemed: contractInviteData[2] || false,
+          topic: contractInviteData[3] || '',
+          duration: contractInviteData[4] || BigInt(0),
         };
       } else {
-        console.error('Unexpected data format from contract:', inviteData);
+        console.error('Unexpected data format from contract:', contractInviteData);
         return undefined;
       }
     } catch (error) {
       console.error('Error parsing invite data:', error);
       return undefined;
     }
-  }, [inviteData]);
+  }, [inviteData, contractInviteData]);
 
+  // Keep the contract write config
   const { config } = usePrepareContractWrite({
     address: CONTRACT_ADDRESS as `0x${string}`,
     abi: ABI,
@@ -280,60 +336,74 @@ export default function RedeemInvite({ tokenId }: { tokenId: number }) {
     }
   };
 
+  // Update the handleRedeem function to also update Supabase
   const handleRedeem = async () => {
-    if (!selectedSlot) {
-      setError('Please select a time slot');
+    if (!selectedSlot || !invite || !write) {
+      setError('Please select a time slot to book the meeting.');
       return;
     }
-
-    // Check if Google Calendar is connected first
-    if (!isGoogleCalendarConnected) {
-      setShowGoogleAuthPrompt(true);
-      return;
-    }
-
-    setError('');
+    
     setIsLoading(true);
-
+    setError('');
+    setSuccess('');
+    
     try {
-      // In v0.0.34, we'll use a simplified approach without SDK wallet methods
-      if (isFarcasterContext) {
-        try {
-          // In a real app, we would have deeper Farcaster integration
-          // For now, use regular web3 flow
-          if (write) {
-            await write();
-            
-            // Simulate successful booking
-            setTimeout(() => {
-              setSuccess('Meeting successfully booked! A calendar invite has been sent to your email.');
-              setIsLoading(false);
-            }, 1500);
-          } else {
-            throw new Error('Contract write not ready');
-          }
-        } catch (error) {
-          console.error('Transaction error:', error);
-          setError('Failed to send transaction. Please try again.');
-          setIsLoading(false);
-        }
-      } else if (write) {
-        // Regular web3 flow
-        await write();
+      // Call the contract function to redeem the invite
+      const tx = await write();
+      
+      // Wait for the transaction to be confirmed
+      if (tx?.hash) {
+        console.log('Transaction submitted:', tx.hash);
         
-        // Simulate successful booking
-        setTimeout(() => {
-          setSuccess('Meeting successfully booked! A calendar invite has been sent to your email.');
-          setIsLoading(false);
-        }, 1500);
-      } else {
-        throw new Error('Contract write not ready');
+        // Create meeting and get details
+        const slot = availableSlots.find(s => s.start === selectedSlot);
+        if (!slot) throw new Error('Selected time slot not found');
+        
+        // In a real app, this would be an API call to your backend
+        const meetingDetails = await createMeeting(slot, invite);
+        
+        // Update the invite in Supabase
+        if (inviteData) {
+          await markInviteAsRedeemed(
+            tokenId, 
+            meetingDetails.startTime, 
+            meetingDetails.meetingUrl
+          );
+          console.log('Updated invite in Supabase');
+          
+          // Update local state
+          setInviteData({
+            ...inviteData,
+            is_redeemed: true,
+            meeting_time: meetingDetails.startTime,
+            meeting_url: meetingDetails.meetingUrl
+          });
+        }
+        
+        setSuccess(`Your meeting has been booked! Check your email for the calendar invitation.`);
       }
-    } catch (err) {
-      console.error('Error redeeming invite:', err);
-      setError('Failed to book meeting. Please try again.');
+    } catch (error) {
+      console.error('Error redeeming invite:', error);
+      setError('Failed to book the meeting. Please try again.');
+    } finally {
       setIsLoading(false);
     }
+  };
+
+  // Keep existing createMeeting mock function
+  const createMeeting = async (slot: TimeSlot, invite: Invite) => {
+    // Simulating API call to create a meeting
+    console.log(`Creating meeting for topic "${invite.topic}" at ${slot.start}`);
+    
+    // In a real app, this would create a Google Calendar event
+    // and return the meeting details
+    
+    // Return mock meeting details
+    return {
+      startTime: slot.start,
+      endTime: slot.end,
+      meetingUrl: `https://meet.google.com/abc-defg-hij`,
+    };
   };
 
   const formatDate = (dateString: string) => {

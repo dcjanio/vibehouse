@@ -1,812 +1,727 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAccount, useContractRead, useContractReads } from 'wagmi';
-import { WagmiConfig, createConfig, configureChains } from 'wagmi';
-import { RainbowKitProvider, getDefaultWallets, ConnectButton } from '@rainbow-me/rainbowkit';
-import { publicProvider } from 'wagmi/providers/public';
-import RedeemInvite from '@/components/RedeemInvite';
+import React, { useState, useEffect } from 'react';
+import { useAccount } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { storeInvite, getSentInvites, getReceivedInvites, redeemInvite, verifyTokenOwnership, getAllInvites, getAllInvitesByAddress } from '@/lib/supabase';
+import { CalendarInvite } from '@/lib/supabase';
+import { WagmiConfig } from 'wagmi';
+import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
+import { wagmiConfig, chains } from '@/lib/wagmi-config';
 import '@rainbow-me/rainbowkit/styles.css';
 import Link from 'next/link';
-import ManualTokenInput from '@/components/ManualTokenInput';
-import { useSearchParams } from 'next/navigation';
 
-const baseSepolia = {
-  id: 84532,
-  name: 'Base Sepolia',
-  network: 'base-sepolia',
-  nativeCurrency: {
-    decimals: 18,
-    name: 'Ether',
-    symbol: 'ETH',
-  },
-  rpcUrls: {
-    public: { http: [process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC || ''] },
-    default: { http: [process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC || ''] },
-  },
-  blockExplorers: {
-    default: { name: 'BaseScan', url: 'https://sepolia.basescan.org' },
-  },
-  testnet: true,
+// Create a NoSSR component to prevent hydration issues
+const NoSSR = ({ children }) => {
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  if (!mounted) {
+    return null;
+  }
+  
+  return <>{children}</>;
 };
 
-const projectId = process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '';
-
-const { chains, publicClient } = configureChains(
-  [baseSepolia],
-  [publicProvider()]
-);
-
-const { connectors } = getDefaultWallets({
-  appName: 'NFT Calendar Invite',
-  projectId,
-  chains,
-});
-
-const wagmiConfig = createConfig({
-  autoConnect: true,
-  connectors,
-  publicClient,
-});
-
-// Using the deployed testnet contract address
-const CONTRACT_ADDRESS = '0x12d23ebdA380859087b441C9De907ce00bD58662';
-const ABI = [
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      }
-    ],
-    "name": "balanceOf",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "owner",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "index",
-        "type": "uint256"
-      }
-    ],
-    "name": "tokenOfOwnerByIndex",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "invites",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "host",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "expiration",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "isRedeemed",
-        "type": "bool"
-      },
-      {
-        "internalType": "string",
-        "name": "topic",
-        "type": "string"
-      },
-      {
-        "internalType": "uint256",
-        "name": "duration",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "totalSupply",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "ownerOf",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "index",
-        "type": "uint256"
-      }
-    ],
-    "name": "tokenByIndex",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  }
-];
-
-// Interface for invite data
-interface InviteData {
-  id: number;
-  topic: string;
-  sender: string;
-  expiration: bigint;
-  isRedeemed: boolean;
-  duration: bigint;
-}
-
-// Filter types for invite status
-type InviteFilterStatus = 'upcoming' | 'pending' | 'past';
-
-// Main page component
 export default function InvitesPage() {
   return (
-    <WagmiConfig config={wagmiConfig}>
-      <RainbowKitProvider chains={chains}>
-        <InvitesContent />
-      </RainbowKitProvider>
-    </WagmiConfig>
+    <NoSSR>
+      <WagmiConfig config={wagmiConfig}>
+        <RainbowKitProvider chains={chains}>
+          <InvitesContent />
+        </RainbowKitProvider>
+      </WagmiConfig>
+    </NoSSR>
   );
 }
 
-// Inner component that uses wagmi hooks
 function InvitesContent() {
-  const [clientReady, setClientReady] = useState(false);
-  const [selectedInvite, setSelectedInvite] = useState<number | null>(null);
-  const [invites, setInvites] = useState<InviteData[]>([]);
-  const [filteredInvites, setFilteredInvites] = useState<InviteData[]>([]);
-  const [filterStatus, setFilterStatus] = useState<InviteFilterStatus>('upcoming');
-  const [tokenIds, setTokenIds] = useState<number[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showTokenInputHighlighted, setShowTokenInputHighlighted] = useState(false);
   const { address, isConnected } = useAccount();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState('sent');
+  const [sentInvites, setSentInvites] = useState<CalendarInvite[]>([]);
+  const [receivedInvites, setReceivedInvites] = useState<CalendarInvite[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
+  const [selectedInvite, setSelectedInvite] = useState<CalendarInvite | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<{
+    connected: boolean;
+    message: string;
+    details?: any;
+  } | null>(null);
 
-  // Set client ready after mount to prevent hydration mismatch
+  // State for calendar and scheduling
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [tokenIdInput, setTokenIdInput] = useState('');
+  
+  // Time slots
+  const timeSlots = [
+    "07:30", "08:30", "09:00", "09:30", 
+    "10:00", "10:30", "11:00", "11:30", 
+    "12:00", "12:30", "13:00", "13:30", 
+    "14:00", "14:30", "15:00", "15:30",
+    "16:00", "16:30", "17:00", "17:30"
+  ];
+
+  // Admin wallet address
+  const ADMIN_ADDRESS = '0x614220b724070f274D0DBeB3D42ED2804aF488c7';
+  
+  // Check if current wallet is admin
+  const isAdmin = address?.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+
+  // Validate email format
+  const validateEmail = (email: string) => {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+  };
+
+  // Check for transaction hash in URL
   useEffect(() => {
-    setClientReady(true);
-    
-    // Check if we should highlight the token input section
-    const showTokenInput = searchParams.get('showTokenInput');
-    if (showTokenInput === 'true') {
-      setShowTokenInputHighlighted(true);
+    const txHash = searchParams.get('txHash');
+    if (txHash) {
+      setSuccess(`Transaction successful! Hash: ${txHash}`);
     }
   }, [searchParams]);
 
-  // Update filtered invites whenever invites or filter status changes
+  // Check Supabase connection on initial load
   useEffect(() => {
-    if (!invites.length) {
-      setFilteredInvites([]);
+    const checkConnection = async () => {
+      try {
+        const { testSupabaseConnection } = await import('@/lib/supabase');
+        const result = await testSupabaseConnection();
+        console.log('Supabase connection test result:', result);
+        
+        if (result.connected) {
+          const message = result.tableData 
+            ? `Connected to Supabase. Found ${result.tableData.count?.[0]?.count || 0} invites.` 
+            : 'Connected to Supabase, but calendar_invites table may not exist.';
+          
+          setConnectionStatus({
+            connected: true,
+            message,
+            details: result
+          });
+        } else {
+          setConnectionStatus({
+            connected: false,
+            message: 'Failed to connect to Supabase',
+            details: result.error
+          });
+        }
+      } catch (error) {
+        console.error('Error testing Supabase connection:', error);
+        setConnectionStatus({
+          connected: false,
+          message: 'Error testing Supabase connection',
+          details: error
+        });
+      }
+    };
+    
+    checkConnection();
+  }, []);
+
+  useEffect(() => {
+    if (isConnected && address) {
+      fetchInvites();
+    } else {
+      setLoading(false);
+    }
+  }, [address, isConnected]);
+
+  const fetchInvites = async () => {
+    if (!address) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      // For admin account, fetch sent invites
+      if (isAdmin) {
+        console.log('Fetching sent invites for admin address:', address);
+        const sentData = await getSentInvites(address);
+        console.log('Sent invites data:', sentData);
+        setSentInvites(sentData || []);
+      }
+      
+      // For all accounts, fetch received invites
+      console.log('Fetching received invites for address:', address);
+      const receivedData = await getReceivedInvites(address);
+      console.log('Received invites data:', receivedData);
+      setReceivedInvites(receivedData || []);
+      
+      // If both are empty, try the combined backup method
+      if ((!isAdmin || sentInvites.length === 0) && receivedInvites.length === 0) {
+        console.log('No invites found with standard queries, trying combined method...');
+        const allData = await getAllInvitesByAddress(address);
+        console.log('All invites by address:', allData);
+        
+        if (allData && allData.length > 0) {
+          // Only filter sent invites for admin
+          if (isAdmin) {
+            const sent = allData.filter(invite => 
+              invite.sender_address.toLowerCase() === address.toLowerCase()
+            );
+            console.log('Filtered sent invites:', sent);
+            if (sent.length > 0) setSentInvites(sent);
+          }
+          
+          // Filter received invites for all users
+          const received = allData.filter(invite => 
+            invite.recipient_address.toLowerCase() === address.toLowerCase()
+          );
+          console.log('Filtered received invites:', received);
+          if (received.length > 0) setReceivedInvites(received);
+        }
+      }
+      
+      // Set default active tab based on user type
+      if (isAdmin) {
+        setActiveTab('sent');
+      } else {
+        setActiveTab('received');
+      }
+    } catch (err) {
+      console.error('Error fetching invites:', err);
+      setError('Failed to load invites. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleScheduleMeeting = async () => {
+    if (!selectedInvite || !selectedDate || !selectedTime) {
+      setError('Please select a date and time for your meeting');
       return;
     }
 
-    const now = BigInt(Math.floor(Date.now() / 1000));
-    
-    let filtered: InviteData[];
-    switch (filterStatus) {
-      case 'upcoming':
-        // Active invites that haven't been redeemed and haven't expired
-        filtered = invites.filter(invite => 
-          !invite.isRedeemed && invite.expiration > now
-        );
-        break;
-      case 'pending':
-        // Invites that have been redeemed but the meeting is in the future
-        filtered = invites.filter(invite => 
-          invite.isRedeemed
-        );
-        break;
-      case 'past':
-        // Expired invites or past meetings
-        filtered = invites.filter(invite =>
-          invite.expiration < now && !invite.isRedeemed
-        );
-        break;
-      default:
-        filtered = invites;
+    if (!email) {
+      setEmailError('Please enter your email address');
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      setEmailError('Please enter a valid email address');
+      return;
     }
     
-    setFilteredInvites(filtered);
+    setLoading(true);
+    setError('');
+    setEmailError('');
     
-    // If we have filtered results and no selected invite, select the first one
-    if (filtered.length > 0 && !selectedInvite) {
-      setSelectedInvite(filtered[0].id);
-    }
-  }, [invites, filterStatus, selectedInvite]);
-
-  // Find tokens by querying total supply and scanning each token
-  useEffect(() => {
-    const fetchAllTokens = async () => {
-      if (!clientReady) return;
-      
-      setLoading(true);
-      console.log('Fetching all tokens from contract...');
-      
-      try {
-        // First get the total supply
-        const totalSupply = await publicClient.readContract({
-          address: CONTRACT_ADDRESS as `0x${string}`,
-          abi: ABI,
-          functionName: 'totalSupply',
-        });
-        
-        console.log(`Total supply: ${totalSupply}`);
-        
-        // This will store all tokens we find
-        const foundTokens: number[] = [];
-        const maxBatchSize = 10; // Process in batches to avoid rate limiting
-        
-        // If user is connected, find only their tokens
-        if (isConnected && address) {
-          console.log(`Finding tokens owned by ${address}...`);
-          
-          // Scan all tokens from 0 to totalSupply-1
-          for (let i = 0; i < Number(totalSupply); i += maxBatchSize) {
-            const batch = [];
-            for (let j = 0; j < maxBatchSize && i + j < Number(totalSupply); j++) {
-              batch.push(i + j);
-            }
-            
-            console.log(`Scanning tokens ${batch[0]} to ${batch[batch.length-1]}`);
-            
-            // Get the owner of each token
-            const ownerChecks = batch.map(tokenId => ({
-              address: CONTRACT_ADDRESS as `0x${string}`,
-              abi: ABI as any,
-              functionName: 'ownerOf',
-              args: [BigInt(tokenId)],
-            }));
-            
-            const ownerResults = await publicClient.multicall({
-              contracts: ownerChecks,
-              allowFailure: true,
-            });
-            
-            // Process results - only add tokens owned by the connected address
-            ownerResults.forEach((result, index) => {
-              if (result.status === 'success') {
-                const tokenId = batch[index];
-                const owner = result.result;
-                
-                if (owner && owner.toLowerCase() === address.toLowerCase()) {
-                  console.log(`Token ${tokenId} belongs to user: ${address}`);
-                  foundTokens.push(tokenId);
-                }
-              }
-            });
-          }
-        } 
-        // If no wallet is connected, don't show any invites (user must connect)
-        else {
-          console.log('No wallet connected, not showing any invites');
-        }
-        
-        console.log('All found tokens:', foundTokens);
-        
-        if (foundTokens.length > 0) {
-          setTokenIds(foundTokens);
-        } else {
-          console.log('No tokens found');
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error('Error scanning tokens:', error);
-        setLoading(false);
-      }
-    };
+    // Format date and time to ISO format
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(selectedDate.getDate()).padStart(2, '0');
     
-    fetchAllTokens();
-  }, [address, isConnected, publicClient, clientReady]);
-
-  // Fall back to Transfer events if the above method fails
-  useEffect(() => {
-    // Only run if we haven't found tokens with the first method
-    if (tokenIds.length > 0 || !address || !isConnected || !clientReady) return;
+    const scheduledDateTime = `${year}-${month}-${day}T${selectedTime}:00`;
     
-    const fetchTokensByEvents = async () => {
-      setLoading(true);
-      console.log(`Falling back to Transfer events scan for ${address}...`);
-      
-      try {
-        // Rest of the existing Transfer event scanning code...
-        // ... (Keep the existing Transfer event code as fallback)
-        
-        // This is the Transfer event signature
-        const transferEventSignature = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-        
-        // Create a filter for Transfer events where the user is the recipient
-        // Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
-        // We want events where 'to' is the user's address
-        const filter = {
-          address: CONTRACT_ADDRESS as `0x${string}`,
-          fromBlock: 'earliest' as const,
-          toBlock: 'latest' as const,
-          topics: [
-            transferEventSignature, // Transfer event signature
-            null, // from (any address)
-            `0x000000000000000000000000${address.slice(2).toLowerCase()}` // to (user address, properly padded)
-          ]
-        };
-        
-        console.log('Filter:', filter);
-        
-        // Get the logs
-        const logs = await publicClient.getLogs(filter);
-        console.log('Transfer event logs found:', logs);
-        
-        // Extract token IDs from the logs
-        const receivedTokenIds: number[] = [];
-        
-        // Process the logs to extract token IDs
-        for (const log of logs) {
-          // In a Transfer event, the tokenId is in the third topic (index 3)
-          if (log.topics && log.topics.length >= 4) {
-            const tokenIdHex = log.topics[3];
-            const tokenId = parseInt(tokenIdHex, 16);
-            console.log(`Found token transfer: ${tokenId}`);
-            receivedTokenIds.push(tokenId);
-          }
-        }
-        
-        // We also need to check if the user has transferred any tokens away
-        // Create a filter for Transfer events where the user is the sender
-        const outFilter = {
-          address: CONTRACT_ADDRESS as `0x${string}`,
-          fromBlock: 'earliest' as const,
-          toBlock: 'latest' as const,
-          topics: [
-            transferEventSignature, // Transfer event signature
-            `0x000000000000000000000000${address.slice(2).toLowerCase()}`, // from (user address)
-            null // to (any address)
-          ]
-        };
-        
-        // Get the logs for outgoing transfers
-        const outLogs = await publicClient.getLogs(outFilter);
-        console.log('Outgoing transfer logs found:', outLogs);
-        
-        // Extract token IDs that the user has sent to others
-        const sentTokenIds: number[] = [];
-        for (const log of outLogs) {
-          if (log.topics && log.topics.length >= 4) {
-            const tokenIdHex = log.topics[3];
-            const tokenId = parseInt(tokenIdHex, 16);
-            console.log(`Found token sent: ${tokenId}`);
-            sentTokenIds.push(tokenId);
-          }
-        }
-        
-        // Filter out tokens that the user has sent away
-        const currentTokenIds = receivedTokenIds.filter(id => !sentTokenIds.includes(id));
-        
-        console.log('Current tokens owned by user:', currentTokenIds);
-        
-        // Update state with the token IDs
-        if (currentTokenIds.length > 0) {
-          setTokenIds(currentTokenIds);
-        } else {
-          console.log('No tokens found for this user via events');
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error('Error scanning Transfer events:', error);
-        setLoading(false);
-      }
-    };
-    
-    fetchTokensByEvents();
-  }, [tokenIds.length, address, isConnected, publicClient, clientReady]);
-
-  // Then, fetch invite details for all owned token IDs
-  useEffect(() => {
-    const fetchInviteDetails = async () => {
-      if (tokenIds.length === 0) {
-        setLoading(false);
-        return;
-      }
-      
-      console.log('Fetching invite details for token IDs:', tokenIds);
-      
-      try {
-        // Use individual calls instead of multicall for more reliability
-        const inviteData: InviteData[] = [];
-        
-        for (const tokenId of tokenIds) {
-          try {
-            console.log(`Fetching invite details for token ID ${tokenId}`);
-            
-            const data = await publicClient.readContract({
-              address: CONTRACT_ADDRESS as `0x${string}`,
-              abi: ABI as any,
-              functionName: 'invites',
-              args: [BigInt(tokenId)],
-            });
-            
-            console.log(`Got invite data for token ${tokenId}:`, data);
-            
-            if (data) {
-              const invite = {
-                id: tokenId,
-                topic: (data as any)[3] || 'No Topic',           // topic at index 3
-                sender: (data as any)[0] || '0x0000000000000000000000000000000000000000', // host at index 0
-                expiration: (data as any)[1] || BigInt(0),       // expiration at index 1
-                isRedeemed: (data as any)[2] || false,           // isRedeemed at index 2
-                duration: (data as any)[4] || BigInt(0),         // duration at index 4
-              };
-              
-              console.log(`Parsed invite for token ${tokenId}:`, invite);
-              inviteData.push(invite);
-            }
-          } catch (error) {
-            console.error(`Error fetching details for token ${tokenId}:`, error);
-          }
-        }
-        
-        console.log('All fetched invite data:', inviteData);
-        
-        setInvites(inviteData);
-        
-        // Select the first valid invite by default if there is one
-        const firstValidInvite = inviteData.find(invite => 
-          !invite.isRedeemed && invite.expiration > BigInt(Math.floor(Date.now() / 1000))
-        );
-        
-        if (firstValidInvite && !selectedInvite) {
-          console.log('Setting selected invite:', firstValidInvite.id);
-          setSelectedInvite(firstValidInvite.id);
-        }
-      } catch (error) {
-        console.error('Error fetching invite details:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchInviteDetails();
-  }, [tokenIds, publicClient, selectedInvite]);
-
-  const getInviteStatus = (invite: InviteData) => {
-    if (invite.isRedeemed) {
-      return { label: 'Booked', className: 'bg-blue-500/10 border-blue-500 text-blue-500' };
-    }
-    
-    if (invite.expiration < BigInt(Math.floor(Date.now() / 1000))) {
-      return { label: 'Expired', className: 'bg-yellow-500/10 border-yellow-500 text-yellow-500' };
-    }
-    
-    return { label: 'Active', className: 'bg-green-500/10 border-green-500 text-green-500' };
-  };
-
-  // Format address for display
-  const formatAddress = (address: string): string => {
-    if (!address || address === '0x0000000000000000000000000000000000000000') return 'Unknown';
     try {
-      return `${address.substring(0, 6)}...${address.substring(38)}`;
-    } catch (e) {
-      return address;
+      // Update the invite in Supabase with scheduled time and email
+      await redeemInvite(
+        selectedInvite.token_id, 
+        scheduledDateTime,
+        email
+      );
+      
+      // Add interaction with the NFT contract here - marking as redeemed
+      // This would typically call a contract function to mark the NFT as redeemed
+      try {
+        // Import contract interaction utilities
+        const { getContract } = await import('@/lib/contracts');
+        const signer = await import('@/lib/get-signer').then(mod => mod.default());
+        
+        if (signer) {
+          const contract = getContract(signer);
+          
+          // Call the contract's redeem function
+          // Note: This assumes your contract has a redeemInvite function
+          // Adjust based on your actual contract implementation
+          const tx = await contract.redeemInvite(selectedInvite.token_id);
+          await tx.wait();
+          
+          setSuccess(`Meeting scheduled successfully for ${day}/${month}/${year} at ${selectedTime}! NFT has been redeemed.`);
+        } else {
+          // If we can't get the signer, still mark as success but note the contract interaction failed
+          setSuccess(`Meeting scheduled successfully for ${day}/${month}/${year} at ${selectedTime}! (Note: NFT contract interaction failed, but your booking is confirmed)`);
+        }
+      } catch (contractErr) {
+        console.error('Error interacting with contract:', contractErr);
+        // Still mark as success if Supabase update worked, even if contract interaction failed
+        setSuccess(`Meeting scheduled successfully for ${day}/${month}/${year} at ${selectedTime}! (Note: NFT marking failed, but your booking is confirmed)`);
+      }
+      
+      setSelectedInvite(null);
+      setSelectedDate(null);
+      setSelectedTime(null);
+      setEmail('');
+      await fetchInvites();
+    } catch (err) {
+      console.error('Error scheduling meeting:', err);
+      setError('Failed to schedule meeting. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // If not client ready yet, show a skeleton loader
-  if (!clientReady) {
-    return (
-      <main className="flex min-h-screen flex-col items-center p-6 md:p-24 bg-primary">
-        <div className="z-10 max-w-6xl w-full">
-          <div className="flex justify-between mb-8">
-            <div className="h-10 w-48 bg-gray-700 rounded animate-pulse"></div>
-            <div className="h-10 w-24 bg-gray-700 rounded animate-pulse"></div>
-          </div>
-          <div className="h-64 w-full bg-gray-800 rounded animate-pulse"></div>
-        </div>
-      </main>
-    );
-  }
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Not scheduled';
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  };
 
-  // Not connected view with token input section
+  // Calendar navigation
+  const goToPreviousMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  };
+
+  // Generate calendar days for current month
+  const getDaysInMonth = () => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    
+    // Adjust for Sunday as first day of week
+    const adjustedFirstDay = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+    
+    const days = [];
+    
+    // Add empty cells for days before the first of the month
+    for (let i = 0; i < adjustedFirstDay; i++) {
+      days.push(null);
+    }
+    
+    // Add days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(year, month, i);
+      days.push(date);
+    }
+    
+    return days;
+  };
+
+  // Check if a day is in the past
+  const isPastDay = (date: Date | null) => {
+    if (!date) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date < today;
+  };
+
+  // Format date for display
+  const formatDateForDisplay = (date: Date) => {
+    const options: Intl.DateTimeFormatOptions = { weekday: 'long', month: 'long', day: 'numeric' };
+    return date.toLocaleDateString('en-US', options);
+  };
+
+  const formatAddress = (address: string) => {
+    return address.slice(0, 6) + '...' + address.slice(-4);
+  };
+
+  const checkTokenId = async () => {
+    if (!tokenIdInput) return;
+    
+    try {
+      const invite = await verifyTokenOwnership(tokenIdInput);
+      if (invite) {
+        setSelectedInvite(invite);
+        setSelectedDate(null);
+        setSelectedTime(null);
+        setEmail('');
+        setEmailError('');
+      } else {
+        setError('Invite not found');
+      }
+    } catch (err) {
+      console.error('Error checking token ID:', err);
+      setError('Error checking token ID');
+    }
+  };
+
   if (!isConnected) {
     return (
-      <main className="flex min-h-screen flex-col items-center p-6 md:p-24 bg-primary">
-        <div className="z-10 max-w-6xl w-full">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-            <div>
-              <h1 className="text-4xl font-bold text-accent">My Invites</h1>
-              <p className="text-gray-400 mt-1">Calendar invites sent to your wallet address</p>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <a 
-                href="https://sepolia.basescan.org/address/0x12d23ebda380859087b441c9de907ce00bd58662" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
-              >
-                View Contract
-              </a>
-              <Link href="/" className="text-blue-400 hover:underline">
-                Create New Invite
-              </Link>
-              <ConnectButton />
-            </div>
-          </div>
-        
-          <div className="flex flex-col lg:flex-row gap-8">
-            <div className="w-full">
-              {showTokenInputHighlighted && (
-                <div className="p-6 bg-blue-500/10 border-2 border-blue-500 rounded-lg mb-8 animate-pulse">
-                  <h2 className="text-2xl font-bold text-blue-400 mb-4">View Specific Invite</h2>
-                  <p className="text-gray-400 mb-6">
-                    Enter the token ID of the invite you want to view. You don't need to connect a wallet
-                    to view specific invite details.
-                  </p>
-                  <ManualTokenInput 
-                    onTokenSubmit={(tokenId) => {
-                      console.log("Manual token ID submitted:", tokenId);
-                      setSelectedInvite(tokenId);
-                    }} 
-                    autoFocus={true}
-                  />
-                </div>
-              )}
-            
-              <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                <h2 className="text-2xl font-bold text-accent mb-6">Connect Wallet to View Your Invites</h2>
-                <p className="text-gray-400 mb-8">
-                  Connect your wallet to view and manage your calendar invites. 
-                  <br />Once connected, you'll see all the meeting invites sent to your wallet address.
-                </p>
-                <div className="flex justify-center">
-                  <ConnectButton />
-                </div>
-                
-                <div className="mt-10 pt-6 border-t border-gray-700">
-                  <h3 className="text-lg font-medium text-accent mb-4">Or View a Specific Invite</h3>
-                  <div className="max-w-md mx-auto">
-                    <ManualTokenInput 
-                      onTokenSubmit={(tokenId) => {
-                        console.log("Manual token ID submitted:", tokenId);
-                        setSelectedInvite(tokenId);
-                      }} 
-                      autoFocus={showTokenInputHighlighted}
-                    />
-                  </div>
-                </div>
-                
-                <div className="mt-6 pt-6 border-t border-gray-700 flex justify-center">
-                  <Link href="/" className="bg-blue-600 text-white py-2 px-6 rounded hover:bg-blue-700 transition-colors">
-                    Create New Invite
-                  </Link>
-                </div>
-              </div>
-            </div>
-            
-            {selectedInvite && (
-              <div className="w-full lg:w-2/3">
-                <RedeemInvite tokenId={selectedInvite} />
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
+      <div className="container mx-auto px-4 py-8 bg-gray-900 text-white min-h-screen">
+        <h1 className="text-3xl font-bold mb-6">NFT Calendar Invites</h1>
+        <p className="mb-4">Connect your wallet to see your invites</p>
+        <ConnectButton />
+      </div>
     );
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 md:p-24 bg-primary">
-      <div className="z-10 max-w-6xl w-full">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-4xl font-bold text-accent">My Invites</h1>
-            <p className="text-gray-400 mt-1">Calendar invites sent to your wallet address</p>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <a 
-              href="https://sepolia.basescan.org/address/0x12d23ebda380859087b441c9de907ce00bd58662" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:underline"
-            >
-              View Contract
-            </a>
-            <Link href="/" className="text-blue-400 hover:underline">
-              Create New Invite
-            </Link>
-            <ConnectButton />
+    <div className="container mx-auto px-4 py-8 bg-gray-900 text-white min-h-screen">
+      <h1 className="text-3xl font-bold mb-6">NFT Calendar Invites</h1>
+      
+      {success && (
+        <div className="bg-green-900 border border-green-700 text-green-300 px-4 py-3 rounded relative mb-4">
+          {success}
+        </div>
+      )}
+      
+      {error && (
+        <div className="bg-red-900 border border-red-700 text-red-300 px-4 py-3 rounded relative mb-4">
+          {error}
+        </div>
+      )}
+
+      {/* Calendar Invite Selection UI */}
+      {selectedInvite ? (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 text-white rounded-lg shadow-xl p-6 max-w-4xl w-full border border-blue-500">
+            <h2 className="text-3xl font-bold mb-6 text-gradient bg-gradient-to-r from-blue-400 to-purple-500">Schedule Your Meeting</h2>
+            
+            <div className="flex flex-col md:flex-row gap-8">
+              {/* Calendar Column */}
+              <div className="md:w-1/2">
+                <div className="flex items-center justify-between mb-4">
+                  <button 
+                    onClick={goToPreviousMonth}
+                    className="text-blue-400 hover:text-purple-400 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  
+                  <h3 className="text-xl font-medium text-blue-300">
+                    {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </h3>
+                  
+                  <button 
+                    onClick={goToNextMonth}
+                    className="text-blue-400 hover:text-purple-400 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
+                    <div key={day} className="text-center font-medium text-blue-400 text-sm py-2">
+                      {day}
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="grid grid-cols-7 gap-1">
+                  {getDaysInMonth().map((date, index) => (
+                    <div key={index} className="text-center">
+                      {date ? (
+                        <button
+                          onClick={() => setSelectedDate(date)}
+                          disabled={isPastDay(date)}
+                          className={`
+                            w-12 h-12 rounded-full flex items-center justify-center text-lg
+                            ${isPastDay(date) ? 'text-gray-600 cursor-not-allowed' : 'text-white hover:bg-blue-500 hover:bg-opacity-20'}
+                            ${selectedDate && date.getDate() === selectedDate.getDate() && 
+                              date.getMonth() === selectedDate.getMonth() && 
+                              date.getFullYear() === selectedDate.getFullYear() 
+                              ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white' : ''}
+                          `}
+                        >
+                          {date.getDate()}
+                        </button>
+                      ) : (
+                        <span className="w-12 h-12"></span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Email Input Section */}
+                <div className="mt-6">
+                  <label htmlFor="email" className="block text-sm font-medium text-blue-300 mb-2">
+                    Your Email Address <span className="text-pink-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    id="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (emailError) setEmailError('');
+                    }}
+                    placeholder="Enter your email address"
+                    className="w-full bg-gray-800 border border-blue-700 rounded-md py-2 px-4 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-lg shadow-blue-900/20"
+                    required
+                  />
+                  {emailError && (
+                    <p className="mt-1 text-sm text-pink-400">{emailError}</p>
+                  )}
+                  <p className="mt-2 text-sm text-gray-400">
+                    Your email is used to send you meeting details and reminders
+                  </p>
+                </div>
+              </div>
+              
+              {/* Time Selection Column */}
+              <div className="md:w-1/2 md:border-l md:border-gray-700 md:pl-8">
+                {selectedDate ? (
+                  <>
+                    <h3 className="text-xl font-medium mb-4 text-blue-300">
+                      {formatDateForDisplay(selectedDate)}
+                    </h3>
+                    
+                    {!selectedTime ? (
+                      <p className="text-blue-300 mb-4">Please select a time slot</p>
+                    ) : null}
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {timeSlots.map(time => (
+                        <button
+                          key={time}
+                          onClick={() => setSelectedTime(time)}
+                          className={`
+                            p-4 border rounded-md text-center font-medium transition-colors
+                            ${selectedTime === time 
+                              ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white border-transparent' 
+                              : 'border-gray-700 text-gray-200 hover:border-blue-400 hover:bg-gray-800'}
+                          `}
+                        >
+                          {time}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    <div className="mt-6 p-4 bg-gray-800 rounded-md border border-blue-700 shadow-lg shadow-blue-900/20">
+                      <h4 className="font-medium text-blue-300 mb-2">Meeting Details</h4>
+                      <p className="text-white">
+                        <span className="font-semibold text-purple-300">Topic:</span> {selectedInvite.topic}
+                      </p>
+                      <p className="text-white mt-1">
+                        <span className="font-semibold text-purple-300">Duration:</span> {selectedInvite.duration} minutes
+                      </p>
+                      <p className="text-white mt-1">
+                        <span className="font-semibold text-purple-300">Invite ID:</span> #{selectedInvite.token_id}
+                      </p>
+                      <p className="mt-3 text-sm text-blue-300">
+                        By scheduling this meeting, you will redeem your NFT invite token.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-center py-16">
+                    <p className="text-blue-300">
+                      Please select a date from the calendar to view available time slots
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex justify-end mt-8 space-x-3">
+              <button
+                onClick={() => {
+                  setSelectedInvite(null);
+                  setSelectedDate(null);
+                  setSelectedTime(null);
+                  setEmail('');
+                  setEmailError('');
+                }}
+                className="px-6 py-2 border border-gray-600 rounded-md font-medium text-gray-300 hover:bg-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              
+              <button
+                onClick={handleScheduleMeeting}
+                disabled={!selectedDate || !selectedTime || !email || loading}
+                className={`
+                  px-6 py-2 rounded-md font-medium
+                  ${!selectedDate || !selectedTime || !email || loading
+                    ? 'bg-blue-500 bg-opacity-50 text-gray-300 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white transition-all transform hover:scale-105'}
+                `}
+              >
+                {loading ? 'Scheduling...' : 'Schedule Meeting'}
+              </button>
+            </div>
           </div>
         </div>
-        
-        <div className="flex flex-col lg:flex-row gap-8">
-          <div className="w-full lg:w-1/3">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-accent">My Calendar Invites</h2>
-              {loading && (
-                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-              )}
-            </div>
-            
-            {/* Filter Status Tabs */}
-            <div className="mb-4 bg-gray-800 rounded-lg p-1 flex">
-              <button
-                onClick={() => setFilterStatus('upcoming')}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                  filterStatus === 'upcoming' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                }`}
-              >
-                Upcoming
-              </button>
-              <button
-                onClick={() => setFilterStatus('pending')}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                  filterStatus === 'pending' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                }`}
-              >
-                Pending
-              </button>
-              <button
-                onClick={() => setFilterStatus('past')}
-                className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                  filterStatus === 'past' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                }`}
-              >
-                Past
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              {filteredInvites.length > 0 ? (
-                filteredInvites.map((invite) => {
-                  const status = getInviteStatus(invite);
-                  
-                  return (
-                    <button
-                      key={invite.id}
-                      onClick={() => setSelectedInvite(invite.id)}
-                      className={`w-full p-4 rounded-lg text-left ${
-                        selectedInvite === invite.id
-                          ? 'bg-blue-500/10 border border-blue-500'
-                          : 'bg-gray-800 border border-gray-700 hover:border-gray-600'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-accent">{invite.topic}</p>
-                          <p className="text-sm text-gray-400 mt-1">
-                            From: {formatAddress(invite.sender)}
-                          </p>
+      ) : null}
+
+      {/* Main content (list of invites) */}
+      <div className="mt-8">
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin w-8 h-8 border-t-2 border-b-2 border-blue-500 rounded-full"></div>
+          </div>
+        ) : (
+          <>
+            {isAdmin ? (
+              <>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold text-gradient bg-gradient-to-r from-blue-400 to-purple-500 inline-block">Invites You've Sent</h2>
+                  <Link 
+                    href="/" 
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 text-white py-2 px-6 rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all transform hover:scale-105 font-semibold"
+                  >
+                    Create New Invite
+                  </Link>
+                </div>
+                
+                {sentInvites.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {sentInvites.map(invite => (
+                      <div 
+                        key={invite.token_id} 
+                        className="p-4 bg-gray-800 border border-blue-700 rounded-lg shadow-lg hover:shadow-blue-900/30 transition-all"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="text-xl font-semibold text-white">Token #{invite.token_id}</h3>
+                          <span className={`
+                            px-2 py-1 text-xs rounded-full ${invite.is_redeemed 
+                              ? 'bg-green-900 text-green-300 border border-green-700' 
+                              : 'bg-yellow-900 text-yellow-300 border border-yellow-700'}
+                          `}>
+                            {invite.is_redeemed ? 'Redeemed' : 'Pending'}
+                          </span>
                         </div>
-                        <div className={`px-2 py-1 rounded-full text-xs border ${status.className}`}>
-                          {status.label}
-                        </div>
+                        
+                        <p className="text-blue-300 mb-1"><span className="text-purple-300">Topic:</span> {invite.topic}</p>
+                        <p className="text-blue-300 mb-1"><span className="text-purple-300">To:</span> {formatAddress(invite.recipient_address)}</p>
+                        <p className="text-blue-300 mb-3"><span className="text-purple-300">Duration:</span> {invite.duration} minutes</p>
+                        
+                        {invite.is_redeemed && invite.scheduled_time ? (
+                          <div className="mt-2 p-2 bg-blue-900/30 border border-blue-800 rounded">
+                            <p className="text-sm text-blue-300"><span className="font-semibold">Scheduled for:</span> {formatDate(invite.scheduled_time)}</p>
+                            
+                            {invite.recipient_email && (
+                              <p className="text-sm text-blue-300 mt-1"><span className="font-semibold">Contact:</span> {invite.recipient_email}</p>
+                            )}
+                            
+                            <button 
+                              onClick={() => {
+                                const event = {
+                                  title: `Meeting: ${invite.topic}`,
+                                  description: `Calendar invite from NFT #${invite.token_id}`,
+                                  startTime: new Date(invite.scheduled_time),
+                                  endTime: new Date(new Date(invite.scheduled_time).getTime() + invite.duration * 60000),
+                                  location: 'Online Meeting'
+                                };
+                                
+                                const startTime = event.startTime.toISOString().replace(/-|:|\.\d+/g, '');
+                                const endTime = event.endTime.toISOString().replace(/-|:|\.\d+/g, '');
+                                
+                                const calendarUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${startTime}/${endTime}&details=${encodeURIComponent(event.description)}&location=${encodeURIComponent(event.location)}`;
+                                
+                                window.open(calendarUrl, '_blank');
+                              }}
+                              className="mt-2 w-full py-1 px-2 bg-gradient-to-r from-green-500 to-blue-500 text-white text-xs rounded flex items-center justify-center hover:from-green-600 hover:to-blue-600 transition-all"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              Add to Calendar
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
-                      
-                      <p className="text-xs text-gray-500 mt-2">
-                        {invite.isRedeemed 
-                          ? 'Already booked'
-                          : invite.expiration < BigInt(Math.floor(Date.now() / 1000))
-                            ? 'Expired'
-                            : `Expires: ${new Date(Number(invite.expiration) * 1000).toLocaleDateString()}`
-                        }
-                      </p>
-                    </button>
-                  );
-                })
-              ) : loading ? (
-                <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                  <p className="text-gray-400">Loading your invites...</p>
-                </div>
-              ) : invites.length > 0 ? (
-                <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                  <p className="text-gray-400 mb-4">No {filterStatus} invites found</p>
-                  <p className="text-sm text-gray-500">Try selecting a different filter</p>
-                </div>
-              ) : (
-                <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                  <p className="text-gray-400 mb-4">No invites found for your wallet address</p>
-                  <p className="text-sm text-gray-500 mb-6">We couldn't find any calendar invites sent to {formatAddress(address || '')}</p>
-                  
-                  <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500 rounded-lg text-left">
-                    <h3 className="text-blue-400 font-medium mb-2">View Specific Invite</h3>
-                    <p className="text-sm text-gray-400 mb-4">
-                      If you know the token ID of your invite, you can enter it manually:
-                    </p>
-                    <ManualTokenInput 
-                      onTokenSubmit={(tokenId) => {
-                        console.log("Manual token ID submitted:", tokenId);
-                        setSelectedInvite(tokenId);
-                      }} 
-                      autoFocus={showTokenInputHighlighted}
-                    />
+                    ))}
                   </div>
-                  
-                  <div className="mt-6 border-t border-gray-700 pt-6">
-                    <Link href="/" className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors">
+                ) : (
+                  <div className="p-8 bg-gray-800 border border-blue-700 rounded-lg text-center">
+                    <p className="text-blue-300 mb-4">You haven't sent any invites yet</p>
+                    <p className="text-sm text-gray-400 mb-6">Create your first calendar invite to get started</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold mb-4 text-gradient bg-gradient-to-r from-blue-400 to-purple-500 inline-block">Your Calendar Invites</h2>
+                
+                {receivedInvites.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {receivedInvites.map(invite => (
+                      <div 
+                        key={invite.token_id} 
+                        className={`p-4 bg-gray-800 border ${invite.is_redeemed ? 'border-green-700' : 'border-blue-700'} rounded-lg shadow-lg hover:shadow-blue-900/30 transition-all`}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="text-xl font-semibold text-white">Token #{invite.token_id}</h3>
+                          <span className={`
+                            px-2 py-1 text-xs rounded-full ${invite.is_redeemed 
+                              ? 'bg-green-900 text-green-300 border border-green-700' 
+                              : 'bg-yellow-900 text-yellow-300 border border-yellow-700'}
+                          `}>
+                            {invite.is_redeemed ? 'Redeemed' : 'Pending'}
+                          </span>
+                        </div>
+                        
+                        <p className="text-blue-300 mb-1"><span className="text-purple-300">Topic:</span> {invite.topic}</p>
+                        <p className="text-blue-300 mb-1"><span className="text-purple-300">From:</span> {formatAddress(invite.sender_address)}</p>
+                        <p className="text-blue-300 mb-3"><span className="text-purple-300">Duration:</span> {invite.duration} minutes</p>
+                        
+                        {invite.is_redeemed && invite.scheduled_time ? (
+                          <div className="mt-2 p-2 bg-blue-900/30 border border-blue-800 rounded">
+                            <p className="text-sm text-blue-300"><span className="font-semibold">Scheduled for:</span> {formatDate(invite.scheduled_time)}</p>
+                            
+                            <button 
+                              onClick={() => {
+                                const event = {
+                                  title: `Meeting: ${invite.topic}`,
+                                  description: `Calendar invite from NFT #${invite.token_id}`,
+                                  startTime: new Date(invite.scheduled_time),
+                                  endTime: new Date(new Date(invite.scheduled_time).getTime() + invite.duration * 60000),
+                                  location: 'Online Meeting'
+                                };
+                                
+                                const startTime = event.startTime.toISOString().replace(/-|:|\.\d+/g, '');
+                                const endTime = event.endTime.toISOString().replace(/-|:|\.\d+/g, '');
+                                
+                                const calendarUrl = `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${startTime}/${endTime}&details=${encodeURIComponent(event.description)}&location=${encodeURIComponent(event.location)}`;
+                                
+                                window.open(calendarUrl, '_blank');
+                              }}
+                              className="mt-2 w-full py-1 px-2 bg-gradient-to-r from-green-500 to-blue-500 text-white text-xs rounded flex items-center justify-center hover:from-green-600 hover:to-blue-600 transition-all"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              Add to Calendar
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setSelectedInvite(invite)}
+                            className="w-full mt-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white py-2 px-4 rounded transition-all transform hover:scale-105"
+                          >
+                            Schedule Meeting
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex justify-center items-center p-10">
+                    <Link href="/" className="bg-gradient-to-r from-blue-500 to-purple-500 text-white py-3 px-8 rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all transform hover:scale-105 font-semibold text-lg">
                       Create New Invite
                     </Link>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
-          
-          <div className="w-full lg:w-2/3">
-            {selectedInvite ? (
-              <RedeemInvite tokenId={selectedInvite} />
-            ) : (
-              <div className="p-8 bg-gray-800 rounded-lg border border-gray-700 text-center">
-                <p className="text-gray-400">Select an invite to view details and book a meeting</p>
-              </div>
+                )}
+              </>
             )}
-          </div>
-        </div>
+          </>
+        )}
       </div>
-    </main>
+    </div>
   );
 } 
